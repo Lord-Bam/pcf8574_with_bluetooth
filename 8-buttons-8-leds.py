@@ -1,10 +1,14 @@
 import machine
-import time 
+import time
+import bluetooth
+from ble_uart import BLEUART
+import time
 
 button_press_detected = False
 last_time  = time.ticks_ms()
 
-
+interrupt_pin = ""
+#pin interrupt handler
 def handle_interrupt(pin):
     new_time = time.ticks_ms()
     global last_time
@@ -26,6 +30,24 @@ i2c.writeto(56, b'\xf0')
 pcf_pin = machine.Pin(19, machine.Pin.IN, machine.Pin.PULL_UP)
 pcf_pin.irq(trigger = machine.Pin.IRQ_FALLING | machine.Pin.IRQ_RISING, handler = handle_interrupt)
 print(i2c.scan())
+
+
+
+
+#bluetooth rx interrupt  handler
+def bluetooth_rx_handler():
+    global bluetooth_message
+    bluetooth_message = uart.read().decode().strip()
+    print("rx: ", bluetooth_message)
+
+#bluetooth
+ble = bluetooth.BLE()
+uart = BLEUART(ble)    
+uart.irq(handler=bluetooth_rx_handler)
+bluetooth_message = ""
+
+
+
 
 
 #leds
@@ -51,27 +73,34 @@ led4.value(0)
 print_time = time.ticks_ms()
 while True:
 
-    new_time = time.ticks_ms()
-    if (new_time - print_time) > 2000:
-        print_time = new_time
-        byte = i2c.readfrom(56, 1)
-        i = int.from_bytes(byte, 'big') 
-        bit_string = ('{:0>8}'.format(f"{i:b}"))
-        print(bit_string)
+#     new_time = time.ticks_ms()
+#     if (new_time - print_time) > 2000:
+#         print_time = new_time
+#         byte = i2c.readfrom(56, 1)
+#         i = int.from_bytes(byte, 'big') 
+#         bit_string = ('{:0>8}'.format(f"{i:b}"))
+#         print(bit_string)
     
-    if button_press_detected:
+    if button_press_detected or bluetooth_message != "":
         print("button_press_detected")
         
-        if (interrupt_pin == button1 and button1.value() == 0):
+        
+        if ((interrupt_pin == button1 and button1.value() == 0) or bluetooth_message == "1/1\n\x00"):
             print("button1 on")
             byte = i2c.readfrom(56, 1)
             byte = byte[0] | 1
             i2c.writeto(56, byte.to_bytes(2, 'big'))
+            #######################################
+            #Need to implement a button or ledstate
+            #
+            #
+            ######################################
             
-        if (interrupt_pin == button1 and button1.value() == 1):
+            
+        if ((interrupt_pin == button1 and button1.value() == 1) or bluetooth_message == "1/0\n\x00"):
             print("button1 off")
             byte = i2c.readfrom(56, 1)
-            byte = byte[0] ^ 1
+            byte = byte[0] & 0
             i2c.writeto(56, byte.to_bytes(2, 'big'))
             
         if (interrupt_pin == button2 and button2.value() == 0):
@@ -83,7 +112,7 @@ while True:
         if (interrupt_pin == button2 and button2.value() == 1):
             print("button2 off")
             byte = i2c.readfrom(56, 1)
-            byte = byte[0] ^ 2
+            byte = byte[0] & 2
             i2c.writeto(56, byte.to_bytes(2, 'big'))
             
             
@@ -133,6 +162,7 @@ while True:
                 
         print("")
         button_press_detected = False
+        bluetooth_message = ""
     
         
 
